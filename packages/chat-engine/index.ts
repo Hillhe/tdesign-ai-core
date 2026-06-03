@@ -6,8 +6,8 @@ import { ChatEngineEventType, ChatEventBus } from './event-bus';
 import MessageProcessor from './processor';
 import { LLMService } from './server';
 import {
-  createStreamHandler,
   type AGUIStreamHandler,
+  createStreamHandler,
   type IStreamHandler,
   type OpenClawStreamHandler,
   type StreamContext,
@@ -252,8 +252,8 @@ export default class ChatEngine implements IChatEngine {
    */
   public async sendUserMessage(requestParams: ChatRequestParams, sendRequest = true) {
     const { prompt, attachments, ...customParams } = requestParams;
-
-    const hasValidPrompt = prompt && prompt.trim() !== '';
+    // 输入校验：propmt 和 attachments 至少提供一个有效值, prompt 需为string, 包含空字符串
+    const hasValidPrompt = typeof prompt === 'string';
     const hasValidAttachments = Array.isArray(attachments) && attachments.length > 0;
     if (!hasValidPrompt && !hasValidAttachments) {
       console.warn('[ChatEngine] sendUserMessage: 必须提供有效的 prompt 或 attachments');
