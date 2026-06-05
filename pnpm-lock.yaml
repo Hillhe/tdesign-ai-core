@@ -33,9 +33,6 @@ importers:
 
   packages/chat-engine:
     dependencies:
-      '@tdesign/ai-shared':
-        specifier: workspace:*
-        version: link:../shared
       expr-eval:
         specifier: ^2.0.2
         version: 2.0.2
@@ -43,6 +40,9 @@ importers:
         specifier: '3'
         version: 3.25.76
     devDependencies:
+      '@tdesign/ai-shared':
+        specifier: workspace:*
+        version: link:../shared
       immer:
         specifier: ^10.0.0
         version: 10.2.0
