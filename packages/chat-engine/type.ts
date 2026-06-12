@@ -235,7 +235,28 @@ export interface ChatNetworkConfig {
   /** 请求超时时间（毫秒） */
   timeout?: number;
   /** 协议类型 */
-  protocol?: 'default' | 'agui' | 'openclaw';
+  protocol?: 'default' | 'agui' | 'agui-http-ws' | 'openclaw';
+  /**
+   * AGUI HTTP + WebSocket 解耦协议配置。
+   *
+   * protocol: 'agui-http-ws' 时使用：HTTP endpoint 负责启动 run，
+   * wsEndpoint 负责接收全局 AGUI 事件流。
+   */
+  aguiHttpWs?: {
+    /** 心跳间隔（毫秒），默认 5000；设置为 0 可关闭 */
+    heartbeatInterval?: number;
+    /** 异常断开后的最大重连次数，默认 3 */
+    maxRetries?: number;
+    /** 重连间隔（毫秒），默认由 WebSocketClient 决定 */
+    retryInterval?: number;
+    /** 建连超时时间（毫秒），默认由 WebSocketClient 决定 */
+    timeout?: number;
+    /** WS 连接状态回调，用于调试或业务状态展示 */
+    onStatusChange?: (event: Record<string, any>) => void;
+    /** 是否输出 AGUI HTTP+WS 路由调试日志 */
+    debugger?: boolean;
+    wsEndpoint?: string;
+  };
   /** abort 时通过 WS 发送的请求参数（经 onRequest 格式化后发出），仅 transport: 'ws' 时生效 */
   abortRequest?: ChatRequestParams;
   /**

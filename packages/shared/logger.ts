@@ -3,6 +3,8 @@ export interface Logger {
   info(message: string, ...args: any[]): void;
   warn(message: string, ...args: any[]): void;
   error(message: string, ...args: any[]): void;
+  group?(label: string, ...args: any[]): void;
+  groupEnd?(): void;
 }
 
 export class ConsoleLogger implements Logger {
@@ -28,6 +30,14 @@ export class ConsoleLogger implements Logger {
 
   error(message: string, ...args: any[]): void {
     console.error(`[SSE Error] ${message}`, ...args);
+  }
+
+  group(label: string, ...args: any[]): void {
+    console.group(`[SSE Group] ${label}`, ...args);
+  }
+
+  groupEnd(): void {
+    console.groupEnd();
   }
 }
 

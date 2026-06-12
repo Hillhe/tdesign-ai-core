@@ -89,7 +89,13 @@ export class WebSocketClient extends EventEmitter {
 
   private firstMessageReceived = false;
 
-  /** 用于在 close 时 reject 正在等待的 connect promise */
+  /** 当前正在等待的 connect promise */
+  private connectPromise: Promise<void> | null = null;
+
+  /** 用于在连接成功时 resolve 正在等待的 connect promise */
+  private connectResolve: (() => void) | null = null;
+
+  /** 用于在 close/重试耗尽时 reject 正在等待的 connect promise */
   private connectReject: ((reason: Error) => void) | null = null;
 
   constructor(url: string) {
@@ -115,8 +121,11 @@ export class WebSocketClient extends EventEmitter {
    * 连接 WebSocket 服务
    */
   async connect(config?: WebSocketClientConfig): Promise<void> {
-    if (this.state === WebSocketConnectionState.CONNECTED || this.state === WebSocketConnectionState.CONNECTING) {
+    if (this.state === WebSocketConnectionState.CONNECTED) {
       return;
+    }
+    if (this.state === WebSocketConnectionState.CONNECTING && this.connectPromise) {
+      return this.connectPromise;
     }
 
     this.config = {
@@ -125,13 +134,15 @@ export class WebSocketClient extends EventEmitter {
     };
 
     this.manualClose = false;
-    this.setState(WebSocketConnectionState.CONNECTING);
+    this.retryCount = 0;
 
-    try {
-      await this.establishConnection();
-    } catch (error) {
-      this.handleConnectionError(error as Error);
-    }
+    this.connectPromise = new Promise((resolve, reject) => {
+      this.connectResolve = resolve;
+      this.connectReject = reject;
+      this.openSocket();
+    });
+
+    return this.connectPromise;
   }
 
   /**
@@ -158,15 +169,17 @@ export class WebSocketClient extends EventEmitter {
 
     this.manualClose = true;
     this.setState(WebSocketConnectionState.CLOSING);
+    this.logger.info(`WebSocket ${this.connectionId} close() called by client`, {
+      state: this.state,
+      url: this.url,
+    });
 
     try {
       this.clearTimers();
 
       // 如果 connect 还在 pending（CONNECTING 阶段被 close），reject 它
       if (this.connectReject) {
-        const rejectFn = this.connectReject;
-        this.connectReject = null;
-        rejectFn(new ConnectionError('Connection closed before established'));
+        this.rejectConnect(new ConnectionError('Connection closed before established'));
       }
 
       if (this.ws) {
@@ -224,55 +237,58 @@ export class WebSocketClient extends EventEmitter {
    * 建立 WebSocket 连接
    */
   private establishConnection(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      // 保存 reject，以便 close() 时可以 reject 这个 pending promise
-      this.connectReject = reject;
+    return this.connect(this.config);
+  }
 
-      try {
-        this.ws = new WebSocket(this.url);
+  /**
+   * 建立一次 WebSocket 连接尝试。重连时会复用同一个 connectPromise，
+   * 直到成功 resolve 或重试耗尽 reject。
+   */
+  private openSocket(): void {
+    this.setState(WebSocketConnectionState.CONNECTING);
 
-        // 连接超时处理
-        if (this.config.timeout > 0) {
-          this.timeoutTimer = setTimeout(() => {
-            if (this.state === WebSocketConnectionState.CONNECTING) {
-              const error = new TimeoutError(`WebSocket connection timeout after ${this.config.timeout}ms`);
-              this.handleConnectionError(error);
-              reject(error);
-            }
-          }, this.config.timeout);
-        }
+    try {
+      this.ws = new WebSocket(this.url);
 
-        this.ws.onopen = () => {
-          this.clearTimeout();
-          this.connectReject = null;
-          this.setState(WebSocketConnectionState.CONNECTED);
-          this.retryCount = 0;
-          this.connectionInfo.lastActivity = Date.now();
-
-          // 启动心跳
-          this.startHeartbeat();
-
-          this.logger.info(`WebSocket ${this.connectionId} connected to ${this.url}`);
-          resolve();
-        };
-
-        this.ws.onmessage = (event) => {
-          this.handleMessage(event.data);
-        };
-
-        this.ws.onerror = (event) => {
-          this.logger.error(`WebSocket ${this.connectionId} error:`, event);
-          const error = new ConnectionError('WebSocket connection error');
-          this.emit('error', error);
-        };
-
-        this.ws.onclose = (event) => {
-          this.handleClose(event.code, event.reason);
-        };
-      } catch (error) {
-        reject(error);
+      // 连接超时处理
+      if (this.config.timeout > 0) {
+        this.timeoutTimer = setTimeout(() => {
+          if (this.state === WebSocketConnectionState.CONNECTING) {
+            const error = new TimeoutError(`WebSocket connection timeout after ${this.config.timeout}ms`);
+            this.handleConnectionError(error);
+          }
+        }, this.config.timeout);
       }
-    });
+
+      this.ws.onopen = () => {
+        this.clearTimeout();
+        this.setState(WebSocketConnectionState.CONNECTED);
+        this.retryCount = 0;
+        this.connectionInfo.lastActivity = Date.now();
+
+        // 启动心跳
+        this.startHeartbeat();
+
+        this.logger.info(`WebSocket ${this.connectionId} connected to ${this.url}`);
+        this.resolveConnect();
+      };
+
+      this.ws.onmessage = (event) => {
+        this.handleMessage(event.data);
+      };
+
+      this.ws.onerror = (event) => {
+        this.logger.error(`WebSocket ${this.connectionId} error:`, event);
+        const error = new ConnectionError('WebSocket connection error');
+        this.emit('error', error);
+      };
+
+      this.ws.onclose = (event) => {
+        this.handleClose(event.code, event.reason);
+      };
+    } catch (error) {
+      this.handleConnectionError(error as Error);
+    }
   }
 
   /**
@@ -310,7 +326,7 @@ export class WebSocketClient extends EventEmitter {
     this.clearTimers();
     this.ws = null;
 
-    this.logger.warn(`[WS handleClose] code=${code}, reason="${reason}", manualClose=${this.manualClose}`);
+    this.logger.debug(`[WS handleClose] code=${code}, reason="${reason}", manualClose=${this.manualClose}`);
 
     if (this.manualClose || code === 1000) {
       // 正常关闭
@@ -325,8 +341,10 @@ export class WebSocketClient extends EventEmitter {
       if (this.shouldReconnect()) {
         this.scheduleReconnect();
       } else {
+        const error = new ConnectionError(`WebSocket closed: ${code} - ${reason}`);
         this.emit('complete', false);
-        this.emit('error', new ConnectionError(`WebSocket closed: ${code} - ${reason}`));
+        this.emit('error', error);
+        this.rejectConnect(error);
       }
     }
   }
@@ -341,6 +359,8 @@ export class WebSocketClient extends EventEmitter {
 
     if (this.shouldReconnect()) {
       this.scheduleReconnect();
+    } else {
+      this.rejectConnect(error);
     }
   }
 
@@ -363,9 +383,23 @@ export class WebSocketClient extends EventEmitter {
     this.reconnectTimer = setTimeout(() => {
       if (!this.manualClose && this.state !== WebSocketConnectionState.CONNECTED) {
         this.firstMessageReceived = false;
-        this.connect(this.config);
+        this.openSocket();
       }
     }, delay);
+  }
+
+  private resolveConnect(): void {
+    this.connectResolve?.();
+    this.connectPromise = null;
+    this.connectResolve = null;
+    this.connectReject = null;
+  }
+
+  private rejectConnect(error: Error): void {
+    this.connectReject?.(error);
+    this.connectPromise = null;
+    this.connectResolve = null;
+    this.connectReject = null;
   }
 
   /**

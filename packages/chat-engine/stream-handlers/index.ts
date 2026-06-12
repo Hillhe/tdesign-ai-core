@@ -6,12 +6,15 @@
 export type { IStreamHandler, StreamContext } from './types';
 export { DefaultStreamHandler } from './default-stream-handler';
 export { AGUIStreamHandler } from './agui-stream-handler';
+export { AGUIHttpWSStreamHandler } from './agui-http-ws-stream-handler';
 export { OpenClawStreamHandler } from './openclaw-stream-handler';
+export { disconnectAGUIHttpWS } from '../server/agui-http-ws-manager';
 
 import { LLMService } from '../server';
 import type { IStreamHandler, StreamProtocol } from './types';
 import { DefaultStreamHandler } from './default-stream-handler';
 import { AGUIStreamHandler } from './agui-stream-handler';
+import { AGUIHttpWSStreamHandler } from './agui-http-ws-stream-handler';
 import { OpenClawStreamHandler } from './openclaw-stream-handler';
 
 export interface CreateStreamHandlerOptions {
@@ -31,6 +34,9 @@ export function createStreamHandler(options: CreateStreamHandlerOptions): IStrea
   switch (protocol) {
     case 'agui':
       return new AGUIStreamHandler(llmService);
+
+    case 'agui-http-ws':
+      return new AGUIHttpWSStreamHandler();
 
     case 'openclaw':
       return new OpenClawStreamHandler({ llmService });

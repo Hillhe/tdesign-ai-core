@@ -3,6 +3,7 @@
   "private": true,
   "description": "TDesign AIGC framework-agnostic core SDKs",
   "scripts": {
+    "dev": "pnpm run -F @tdesign/ai-console dev",
     "build": "pnpm -r run build",
     "type-check": "tsc --noEmit",
     "test": "vitest run",

@@ -438,6 +438,8 @@ export default class ChatEngine implements IChatEngine {
     }
 
     try {
+      this.streamHandler.abort?.();
+
       if (transport === 'ws') {
         if (lastAI && (lastAI.status === 'streaming' || lastAI.status === 'pending')) {
           this.handleComplete(lastAI.id, true, this.lastRequestParams || ({} as ChatRequestParams));
@@ -455,7 +457,6 @@ export default class ChatEngine implements IChatEngine {
       } else {
         this.stopReceive = true;
         this.llmService.closeConnect();
-        this.streamHandler.abort?.();
 
         // 非流式 fetch 模式下，删除最后一条 AI 消息（保持 UI 干净）
         if (transport === 'fetch' && this.messageStore.lastAIMessage?.id) {

@@ -489,6 +489,8 @@ export class AGUIEventMapper {
    * 处理工具调用结束事件
    */
   private handleToolCallEnd(event: any) {
+    if (!this.toolCallMap[event.toolCallId]) return null;
+
     // 标记工具调用结束
     this.toolCallEnded.add(event.toolCallId);
     
@@ -509,7 +511,10 @@ export class AGUIEventMapper {
    * 通过相同的 type (toolcall-${toolCallName}-${toolCallId}) 触发 merge 策略。
    */
   private updateToolCallInContext(toolCallId: string, status: 'streaming' | 'complete'): AIMessageContent | null {
-    return createToolCallContent(this.toolCallMap[toolCallId], status, 'merge');
+    const toolCall = this.toolCallMap[toolCallId];
+    if (!toolCall) return null;
+
+    return createToolCallContent(toolCall, status, 'merge');
   }
 }
 
