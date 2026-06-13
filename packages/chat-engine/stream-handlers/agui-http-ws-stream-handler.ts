@@ -1,5 +1,6 @@
 import { aguiHttpWSManager } from '../server/agui-http-ws-manager';
 import { ChatEngineEventType } from '../event-bus';
+import { getHTTPStatusCode } from '../server/errors';
 import type { ChatRequestParams, ChatServiceConfig } from '../type';
 import { LoggerManager } from '../utils/logger';
 import type { IStreamHandler, StreamContext, StreamLifecycleContext, StreamProtocol } from './types';
@@ -144,6 +145,10 @@ export class AGUIHttpWSStreamHandler implements IStreamHandler {
     } catch (error) {
       aguiHttpWSManager.unregisterRoute(bodyMeta.threadId, bodyMeta.runId, routeId);
       this.removeActiveRoute(routeId);
+      if (getHTTPStatusCode(error) === 409) {
+        context.handleError(messageId, error);
+        return;
+      }
       throw error;
     }
   }
