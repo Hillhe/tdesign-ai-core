@@ -5,6 +5,7 @@ import type { ChatEventBusOptions, IChatEventBus } from './event-bus';
 import { ChatEngineEventType, ChatEventBus } from './event-bus';
 import MessageProcessor from './processor';
 import { LLMService } from './server';
+import { getHTTPStatusCode } from './server/errors';
 import {
   type AGUIStreamHandler,
   createStreamHandler,
@@ -56,6 +57,8 @@ export default class ChatEngine implements IChatEngine {
   private lastRequestParams: ChatRequestParams | undefined;
 
   private stopReceive = false;
+
+  private conflictErrors = new WeakSet<object>();
 
   /** 防止 React StrictMode 等场景下重复调用 init */
   private initialized = false;
@@ -329,6 +332,7 @@ export default class ChatEngine implements IChatEngine {
       }
       this.lastRequestParams = params;
     } catch (error) {
+      this.emitConflictIfNeeded(error);
       this.emitRequestError(id!, error, params);
       throw error;
     }
@@ -622,8 +626,23 @@ export default class ChatEngine implements IChatEngine {
 
   /** 运行时错误兜底：回调 + 广播 */
   private handleError(id: string, error: unknown) {
-    this.config.onError?.(error as Error);
+    const isConflict = this.emitConflictIfNeeded(error);
+    if (!isConflict) {
+      this.config.onError?.(error as Error);
+    }
     this.emitRequestError(id, error);
+  }
+
+  private emitConflictIfNeeded(error: unknown) {
+    if (getHTTPStatusCode(error) !== 409) return false;
+
+    if (error && typeof error === 'object') {
+      if (this.conflictErrors.has(error)) return true;
+      this.conflictErrors.add(error);
+    }
+
+    this.config.onConflict?.(error as Error | Response);
+    return true;
   }
 
   /**

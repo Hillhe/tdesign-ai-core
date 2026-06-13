@@ -36,7 +36,7 @@ export class BatchClient extends EventEmitter {
       });
 
       if (!response.ok) {
-        this.emit('error', new ConnectionError(`HTTP error! status: ${response.status}`));
+        this.emit('error', new ConnectionError(`HTTP error! status: ${response.status}`, response.status, response));
         return null as T;
       }
       return (await response.json()) as T;

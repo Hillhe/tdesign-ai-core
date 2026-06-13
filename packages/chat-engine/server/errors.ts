@@ -48,3 +48,33 @@ export class ValidationError extends SSEError {
     this.name = 'ValidationError';
   }
 }
+
+export function getHTTPStatusCode(error: unknown): number | undefined {
+  if (typeof Response !== 'undefined' && error instanceof Response) {
+    return error.status;
+  }
+
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+
+  const { details, status, statusCode } = error as {
+    details?: unknown;
+    status?: unknown;
+    statusCode?: unknown;
+  };
+
+  if (typeof statusCode === 'number') {
+    return statusCode;
+  }
+
+  if (typeof status === 'number') {
+    return status;
+  }
+
+  if (typeof Response !== 'undefined' && details instanceof Response) {
+    return details.status;
+  }
+
+  return undefined;
+}

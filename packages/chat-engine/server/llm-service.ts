@@ -1,6 +1,7 @@
 import type { AIMessageContent, ChatRequestParams, ChatServiceConfig, ChatTransport, SSEChunkData } from '../type';
 import { LoggerManager } from '../utils/logger';
 import { BatchClient } from './batch-client';
+import { getHTTPStatusCode } from './errors';
 import { SSEClient } from './sse-client';
 import { WebSocketClient } from './websocket-client';
 
@@ -64,6 +65,10 @@ export class LLMService implements ILLMService {
     // 确保只有一个客户端实例
     this.batchClient = this.batchClient || new BatchClient();
     this.batchClient.on('error', (error) => {
+      if (getHTTPStatusCode(error) === 409) {
+        config.onConflict?.(error);
+        return;
+      }
       config.onError?.(error);
     });
 
@@ -90,6 +95,10 @@ export class LLMService implements ILLMService {
       // 如果没有data，返回空数组
       return [];
     } catch (error) {
+      if (getHTTPStatusCode(error) === 409) {
+        config.onConflict?.(error as Error | Response);
+        throw error;
+      }
       config.onError?.(error as Error | Response);
       throw error;
     }

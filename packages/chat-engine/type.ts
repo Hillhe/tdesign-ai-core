@@ -290,6 +290,8 @@ export interface DefaultEngineCallbacks {
   onAbort?: () => Promise<void>;
   /** 错误处理 */
   onError?: (err: Error | Response) => void;
+  /** endpoint 返回 409 Conflict 时触发 */
+  onConflict?: (err: Error | Response) => void;
   /**
    * 历史消息加载回调（OpenClaw 专属）
    *
