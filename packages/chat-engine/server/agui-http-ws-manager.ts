@@ -48,6 +48,10 @@ export class AGUIHttpWSManager {
 
   private connectionId = '';
 
+  private connectingPromise: Promise<string> | null = null;
+
+  private connectAttemptId = 0;
+
   private debuggerEnabled = false;
 
   private debugRouteGroups = new Set<RouteKey>();
@@ -92,9 +96,26 @@ export class AGUIHttpWSManager {
       return this.connectionId;
     }
 
-    await this.disconnect();
-    this.emitStatus('connecting', { endpoint });
+    if (this.connectingPromise && this.wsEndpoint === endpoint) {
+      this.emitStatus('connecting', { endpoint, reused: true });
+      return this.connectingPromise;
+    }
+
+    const attemptId = ++this.connectAttemptId;
     this.wsEndpoint = endpoint;
+    this.connectingPromise = this.reconnectCurrentClient(endpoint, options, attemptId);
+    return this.connectingPromise;
+  }
+
+  private async reconnectCurrentClient(
+    endpoint: string,
+    options: AGUIHttpWSConnectionOptions,
+    attemptId: number,
+  ): Promise<string> {
+    await this.closeCurrentClient();
+    if (this.connectAttemptId !== attemptId) return '';
+
+    this.emitStatus('connecting', { endpoint });
     this.connectionId = '';
     this.lastWSError = null;
     this.wsClient = new WebSocketClient(endpoint);
@@ -130,15 +151,7 @@ export class AGUIHttpWSManager {
       this.routes.clear();
     });
 
-    await this.wsClient.connect({
-      heartbeatInterval: 0,
-      maxRetries: options.maxRetries ?? DEFAULT_MAX_RETRIES,
-      retryInterval: options.retryInterval,
-      timeout: options.timeout,
-    });
-    this.startHeartbeat(options.heartbeatInterval);
-
-    return this.waitForAck();
+    return this.connectCurrentClient(options, attemptId);
   }
 
   registerRoute(options: AGUIHttpWSRouteOptions): string {
@@ -202,6 +215,12 @@ export class AGUIHttpWSManager {
   }
 
   async disconnect(): Promise<void> {
+    this.connectAttemptId += 1;
+    this.connectingPromise = null;
+    await this.closeCurrentClient();
+  }
+
+  private async closeCurrentClient(): Promise<void> {
     if (this.ackTimer) {
       clearInterval(this.ackTimer);
       this.ackTimer = null;
@@ -218,6 +237,23 @@ export class AGUIHttpWSManager {
       this.wsClient = null;
     }
     this.closeDebugRouteGroups();
+  }
+
+  private async connectCurrentClient(options: AGUIHttpWSConnectionOptions, attemptId: number): Promise<string> {
+    try {
+      await this.wsClient?.connect({
+        heartbeatInterval: 0,
+        maxRetries: options.maxRetries ?? DEFAULT_MAX_RETRIES,
+        retryInterval: options.retryInterval,
+        timeout: options.timeout,
+      });
+      this.startHeartbeat(options.heartbeatInterval);
+      return await this.waitForAck();
+    } finally {
+      if (this.connectAttemptId === attemptId) {
+        this.connectingPromise = null;
+      }
+    }
   }
 
   private startHeartbeat(interval = DEFAULT_HEARTBEAT_INTERVAL): void {

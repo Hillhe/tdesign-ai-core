@@ -49,13 +49,12 @@ const injectConnectionId = (
 
   try {
     const body = JSON.parse(request.body);
-    // 暂不透传 connectionId，后续确认后端消费方式后再恢复。
-    // if (connectionId) {
-    //   body.forwardedProps = {
-    //     ...(body.forwardedProps || {}),
-    //     connectionId,
-    //   };
-    // }
+    if (connectionId && body.forwardedProps?.continued === true) {
+      body.forwardedProps = {
+        ...body.forwardedProps,
+        connectionId,
+      };
+    }
     return {
       body: JSON.stringify(body),
       runId: extractBodyField(body, 'runId'),
