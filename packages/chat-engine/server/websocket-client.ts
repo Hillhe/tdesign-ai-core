@@ -245,22 +245,28 @@ export class WebSocketClient extends EventEmitter {
    * 直到成功 resolve 或重试耗尽 reject。
    */
   private openSocket(): void {
+    this.clearTimeout();
     this.setState(WebSocketConnectionState.CONNECTING);
 
     try {
-      this.ws = new WebSocket(this.url);
+      const socket = new WebSocket(this.url);
+      this.ws = socket;
 
       // 连接超时处理
       if (this.config.timeout > 0) {
         this.timeoutTimer = setTimeout(() => {
-          if (this.state === WebSocketConnectionState.CONNECTING) {
+          if (this.state === WebSocketConnectionState.CONNECTING && this.ws === socket) {
             const error = new TimeoutError(`WebSocket connection timeout after ${this.config.timeout}ms`);
+            this.closeSocketSilently(socket, 'Connection timeout');
+            this.ws = null;
             this.handleConnectionError(error);
           }
         }, this.config.timeout);
       }
 
-      this.ws.onopen = () => {
+      socket.onopen = () => {
+        if (this.ws !== socket) return;
+
         this.clearTimeout();
         this.setState(WebSocketConnectionState.CONNECTED);
         this.retryCount = 0;
@@ -273,17 +279,20 @@ export class WebSocketClient extends EventEmitter {
         this.resolveConnect();
       };
 
-      this.ws.onmessage = (event) => {
+      socket.onmessage = (event) => {
+        if (this.ws !== socket) return;
         this.handleMessage(event.data);
       };
 
-      this.ws.onerror = (event) => {
+      socket.onerror = (event) => {
+        if (this.ws !== socket) return;
         this.logger.error(`WebSocket ${this.connectionId} error:`, event);
         const error = new ConnectionError('WebSocket connection error');
         this.emit('error', error);
       };
 
-      this.ws.onclose = (event) => {
+      socket.onclose = (event) => {
+        if (this.ws !== socket) return;
         this.handleClose(event.code, event.reason);
       };
     } catch (error) {
@@ -353,6 +362,7 @@ export class WebSocketClient extends EventEmitter {
    * 处理连接错误
    */
   private handleConnectionError(error: Error): void {
+    this.clearTimeout();
     this.connectionInfo.error = error;
     this.setState(WebSocketConnectionState.ERROR);
     this.emit('error', error);
@@ -375,6 +385,11 @@ export class WebSocketClient extends EventEmitter {
    * 调度重连
    */
   private scheduleReconnect(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = undefined;
+    }
+
     this.retryCount++;
     const delay = this.config.retryInterval * Math.pow(1.5, this.retryCount - 1);
 
@@ -450,6 +465,21 @@ export class WebSocketClient extends EventEmitter {
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = undefined;
+    }
+  }
+
+  private closeSocketSilently(socket: WebSocket, reason: string): void {
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+
+    if (socket.readyState === WebSocket.CLOSING || socket.readyState === WebSocket.CLOSED) return;
+
+    try {
+      socket.close(4000, reason);
+    } catch {
+      // Ignore best-effort cleanup errors from stale sockets.
     }
   }
 
