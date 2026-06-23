@@ -129,8 +129,10 @@ export class WebSocketClient extends EventEmitter {
     }
 
     this.config = {
-      ...DEFAULT_WS_CONFIG,
-      ...config,
+      timeout: config?.timeout ?? DEFAULT_WS_CONFIG.timeout,
+      retryInterval: config?.retryInterval ?? DEFAULT_WS_CONFIG.retryInterval,
+      maxRetries: config?.maxRetries ?? DEFAULT_WS_CONFIG.maxRetries,
+      heartbeatInterval: config?.heartbeatInterval ?? DEFAULT_WS_CONFIG.heartbeatInterval,
     };
 
     this.manualClose = false;
