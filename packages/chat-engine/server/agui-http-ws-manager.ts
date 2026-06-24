@@ -284,12 +284,9 @@ export class AGUIHttpWSManager {
       event.to === WebSocketConnectionState.DISCONNECTED
       || event.to === WebSocketConnectionState.ERROR
     ) {
+      this.connectionId = '';
       this.prepareRoutesForReconnectResume();
       return;
-    }
-
-    if (event.to === WebSocketConnectionState.CONNECTED && this.reconnectResumePending) {
-      void this.resumeRoutesAfterReconnect();
     }
   }
 
@@ -306,20 +303,27 @@ export class AGUIHttpWSManager {
     });
   }
 
-  private async resumeRoutesAfterReconnect(): Promise<void> {
+  private async resumeRoutesAfterReconnect(connectionId: string): Promise<void> {
     this.reconnectResumePending = false;
     const routes = Array.from(this.routes.entries());
     this.debugRouteLifecycle('resume routes after websocket reconnect start', {
+      connectionId,
       routeKeys: routes.map(([routeKey]) => routeKey),
       routeSize: routes.length,
     });
 
-    await Promise.all(routes.map(([routeKey, route]) => this.resumeRouteAfterReconnect(routeKey, route)));
+    await Promise.all(routes.map(([routeKey, route]) => (
+      this.resumeRouteAfterReconnect(routeKey, route, connectionId)
+    )));
   }
 
-  private async resumeRouteAfterReconnect(routeKey: RouteKey, route: ActiveRunRoute): Promise<void> {
+  private async resumeRouteAfterReconnect(
+    routeKey: RouteKey,
+    route: ActiveRunRoute,
+    connectionId: string,
+  ): Promise<void> {
     const request = (await route.context.config.onRequest?.(route.params)) || route.params;
-    const requestBody = this.rewriteRunRequestBody(request.body, route);
+    const requestBody = this.rewriteRunRequestBody(request.body, route, connectionId);
 
     if (!requestBody) {
       this.logger.warn(`[AGUI HTTP+WS] reconnect resume skipped: invalid request body ${routeKey}`);
@@ -351,13 +355,21 @@ export class AGUIHttpWSManager {
     }
   }
 
-  private rewriteRunRequestBody(body: BodyInit | null | undefined, route: ActiveRunRoute): BodyInit | null {
-    if (!body || typeof body !== 'string') return null;
+  private rewriteRunRequestBody(
+    body: BodyInit | null | undefined,
+    route: ActiveRunRoute,
+    connectionId: string,
+  ): BodyInit | null {
+    if (!body || typeof body !== 'string' || !connectionId) return null;
 
     try {
       const parsedBody = JSON.parse(body);
       parsedBody.threadId = route.threadId;
       parsedBody.runId = route.runId;
+      parsedBody.forwardedProps = {
+        ...parsedBody.forwardedProps,
+        connectionId,
+      };
       return JSON.stringify(parsedBody);
     } catch {
       return null;
@@ -371,6 +383,9 @@ export class AGUIHttpWSManager {
     if (event.type === 'ack') {
       this.connectionId = event.connectionId || '';
       this.emitStatus('ack', event);
+      if (this.connectionId && this.reconnectResumePending) {
+        void this.resumeRoutesAfterReconnect(this.connectionId);
+      }
       return;
     }
 

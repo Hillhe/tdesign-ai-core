@@ -271,7 +271,6 @@ export class WebSocketClient extends EventEmitter {
 
         this.clearTimeout();
         this.setState(WebSocketConnectionState.CONNECTED);
-        this.retryCount = 0;
         this.connectionInfo.lastActivity = Date.now();
 
         // 启动心跳
