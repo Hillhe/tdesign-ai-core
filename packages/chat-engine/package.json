@@ -1,6 +1,6 @@
 {
   "name": "@tdesign/ai-chat-engine",
-  "version": "0.1.0-patch.10",
+  "version": "0.1.0-patch.11",
   "description": "TDesign ChatEngine - Framework-agnostic AI chat engine core",
   "type": "module",
   "main": "./dist/index.cjs",

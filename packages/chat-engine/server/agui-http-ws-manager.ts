@@ -326,7 +326,7 @@ export class AGUIHttpWSManager {
     const requestBody = this.rewriteRunRequestBody(request.body, route, connectionId);
 
     if (!requestBody) {
-      this.logger.warn(`[AGUI HTTP+WS] reconnect resume skipped: invalid request body ${routeKey}`);
+      this.logger.info(`[AGUI HTTP+WS] reconnect resume skipped: request is not a continued run ${routeKey}`);
       return;
     }
 
@@ -364,10 +364,14 @@ export class AGUIHttpWSManager {
 
     try {
       const parsedBody = JSON.parse(body);
+      const forwardedProps = parsedBody.forwardedProps;
+      if (forwardedProps?.continued !== true || !forwardedProps?.continuedId) {
+        return null;
+      }
       parsedBody.threadId = route.threadId;
       parsedBody.runId = route.runId;
       parsedBody.forwardedProps = {
-        ...parsedBody.forwardedProps,
+        ...forwardedProps,
         connectionId,
       };
       return JSON.stringify(parsedBody);
