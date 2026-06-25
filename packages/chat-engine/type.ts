@@ -290,6 +290,8 @@ export interface DefaultEngineCallbacks {
   onAbort?: () => Promise<void>;
   /** 错误处理 */
   onError?: (err: Error | Response) => void;
+  /** endpoint 返回 401 Unauthorized 时触发 */
+  onUnauthorized?: (err: Error | Response) => void;
   /** endpoint 返回 409 Conflict 时触发 */
   onConflict?: (err: Error | Response) => void;
   /**

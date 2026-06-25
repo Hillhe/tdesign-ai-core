@@ -58,7 +58,7 @@ export default class ChatEngine implements IChatEngine {
 
   private stopReceive = false;
 
-  private conflictErrors = new WeakSet<object>();
+  private handledStatusErrors = new WeakSet<object>();
 
   /** 防止 React StrictMode 等场景下重复调用 init */
   private initialized = false;
@@ -332,7 +332,7 @@ export default class ChatEngine implements IChatEngine {
       }
       this.lastRequestParams = params;
     } catch (error) {
-      this.emitConflictIfNeeded(error);
+      this.emitStatusErrorIfNeeded(error);
       this.emitRequestError(id!, error, params);
       throw error;
     }
@@ -626,19 +626,25 @@ export default class ChatEngine implements IChatEngine {
 
   /** 运行时错误兜底：回调 + 广播 */
   private handleError(id: string, error: unknown) {
-    const isConflict = this.emitConflictIfNeeded(error);
-    if (!isConflict) {
+    const isStatusHandled = this.emitStatusErrorIfNeeded(error);
+    if (!isStatusHandled) {
       this.config.onError?.(error as Error);
     }
     this.emitRequestError(id, error);
   }
 
-  private emitConflictIfNeeded(error: unknown) {
-    if (getHTTPStatusCode(error) !== 409) return false;
+  private emitStatusErrorIfNeeded(error: unknown) {
+    const statusCode = getHTTPStatusCode(error);
+    if (statusCode !== 401 && statusCode !== 409) return false;
 
     if (error && typeof error === 'object') {
-      if (this.conflictErrors.has(error)) return true;
-      this.conflictErrors.add(error);
+      if (this.handledStatusErrors.has(error)) return true;
+      this.handledStatusErrors.add(error);
+    }
+
+    if (statusCode === 401) {
+      this.config.onUnauthorized?.(error as Error | Response);
+      return true;
     }
 
     this.config.onConflict?.(error as Error | Response);

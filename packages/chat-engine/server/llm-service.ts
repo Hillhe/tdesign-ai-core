@@ -5,6 +5,19 @@ import { getHTTPStatusCode } from './errors';
 import { SSEClient } from './sse-client';
 import { WebSocketClient } from './websocket-client';
 
+const emitHTTPStatusCallback = (config: ChatServiceConfig, error: unknown): boolean => {
+  const statusCode = getHTTPStatusCode(error);
+  if (statusCode === 401) {
+    config.onUnauthorized?.(error as Error | Response);
+    return true;
+  }
+  if (statusCode === 409) {
+    config.onConflict?.(error as Error | Response);
+    return true;
+  }
+  return false;
+};
+
 // 与原有接口保持兼容
 export interface ILLMService {
   /**
@@ -65,8 +78,7 @@ export class LLMService implements ILLMService {
     // 确保只有一个客户端实例
     this.batchClient = this.batchClient || new BatchClient();
     this.batchClient.on('error', (error) => {
-      if (getHTTPStatusCode(error) === 409) {
-        config.onConflict?.(error);
+      if (emitHTTPStatusCallback(config, error)) {
         return;
       }
       config.onError?.(error);
@@ -95,8 +107,7 @@ export class LLMService implements ILLMService {
       // 如果没有data，返回空数组
       return [];
     } catch (error) {
-      if (getHTTPStatusCode(error) === 409) {
-        config.onConflict?.(error as Error | Response);
+      if (emitHTTPStatusCallback(config, error)) {
         throw error;
       }
       config.onError?.(error as Error | Response);

@@ -144,7 +144,8 @@ export class AGUIHttpWSStreamHandler implements IStreamHandler {
     } catch (error) {
       aguiHttpWSManager.unregisterRoute(bodyMeta.threadId, bodyMeta.runId, routeId);
       this.removeActiveRoute(routeId);
-      if (getHTTPStatusCode(error) === 409) {
+      const statusCode = getHTTPStatusCode(error);
+      if (statusCode === 401 || statusCode === 409) {
         context.handleError(messageId, error);
         return;
       }
