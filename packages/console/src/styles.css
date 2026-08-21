@@ -7,6 +7,22 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-color: #DCDEE4 transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+*::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #DCDEE4;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #B8BAC0;
 }
 
 body {

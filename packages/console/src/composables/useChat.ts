@@ -24,15 +24,28 @@ export const useChat = (options: {
     });
   };
 
-  const initChat = () => {
+  const initChat = async (initialMessages = options.defaultMessages) => {
     chatEngineRef.value = new ChatEngine();
-    chatEngineRef.value.init(options.chatServiceConfig, options.defaultMessages);
-    syncState(options.defaultMessages || []);
+    await chatEngineRef.value.init(options.chatServiceConfig, initialMessages);
+    syncState(initialMessages || []);
     subscribeToChat();
   };
 
+  const reinitialize = async () => {
+    const currentMessages = messages.value;
+
+    if (msgSubscribeRef.value) {
+      msgSubscribeRef.value();
+      msgSubscribeRef.value = null;
+    }
+    chatEngineRef.value?.destroy();
+    chatEngineRef.value = null;
+
+    await initChat(currentMessages);
+  };
+
   onMounted(() => {
-    initChat();
+    void initChat();
   });
 
   onUnmounted(() => {
@@ -62,6 +75,7 @@ export const useChat = (options: {
   return {
     chatEngine: chatEngineRef,
     messages,
+    reinitialize,
     status,
   };
 };

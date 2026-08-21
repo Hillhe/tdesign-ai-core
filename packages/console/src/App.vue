@@ -263,12 +263,19 @@ const chatServiceConfig: ChatServiceConfig = {
   },
 };
 
-const { chatEngine, messages, status } = useChat({
+const { chatEngine, messages, reinitialize, status } = useChat({
   defaultMessages: seedMessages,
   chatServiceConfig,
 });
 
-const canSend = computed(() => Boolean(form.prompt.trim()) && status.value !== 'pending' && status.value !== 'streaming');
+watch(
+  [() => form.transport, () => form.protocol],
+  () => {
+    void reinitialize();
+  },
+);
+
+const canSend = computed(() => status.value !== 'pending' && status.value !== 'streaming');
 const messageTotal = computed(() => messages.value.length);
 
 const sendMessage = async () => {
@@ -427,7 +434,7 @@ const renderContent = (message: ChatMessagesData) => {
 
         <form class="composer" @submit.prevent="sendMessage">
           <textarea v-model="form.prompt" rows="4" placeholder="输入一条测试消息" />
-          <button type="submit" :disabled="!canSend">发送</button>
+          <button type="submit" >发送</button>
         </form>
       </template>
 
